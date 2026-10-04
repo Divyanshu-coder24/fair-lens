@@ -2,8 +2,7 @@ import axios from "axios";
 
 const http = axios.create({ baseURL: "/api" });
 
-export const errMsg = (e: any): string =>
-  e?.response?.data?.detail ?? e?.message ?? "Something went wrong.";
+export const errMsg = (e: any): string => e?.response?.data?.detail ?? e?.message ?? "Something went wrong.";
 
 export interface Chat { role: "user" | "model"; text: string }
 

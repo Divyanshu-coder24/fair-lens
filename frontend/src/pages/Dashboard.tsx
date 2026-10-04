@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { api, errMsg } from "../api/client";
-import MetricCard from "../components/MetricCard";
-import GroupChart from "../components/GroupChart";
-import CounterfactualLab from "../components/CounterfactualLab";
-import AuditPanel from "../components/AuditPanel";
-import ChatPanel from "../components/ChatPanel";
+import { Database, Play, ScanSearch, TriangleAlert } from "lucide-react";
+import { api, errMsg } from "@/api/client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatCard } from "@/components/stat-card";
+import { GroupChart } from "@/components/group-chart";
+import { CounterfactualLab } from "@/components/counterfactual-lab";
+import { AuditPanel } from "@/components/audit-panel";
+import { ChatPanel } from "@/components/chat-panel";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -15,9 +26,9 @@ export default function Dashboard() {
   const [audit, setAudit] = useState<any>(null);
   const [cf, setCf] = useState<any>(null);
   const [ai, setAi] = useState<any>(null);
+  const [modelName, setModelName] = useState("");
   const [busy, setBusy] = useState({ audit: false, cf: false, ai: false });
   const [err, setErr] = useState({ setup: "", ai: "" });
-  const [modelName, setModelName] = useState("");
   const set = (k: keyof typeof busy, v: boolean) => setBusy(b => ({ ...b, [k]: v }));
   const reset = () => { setAudit(null); setCf(null); setAi(null); };
 
@@ -25,7 +36,6 @@ export default function Dashboard() {
     setErr(e => ({ ...e, setup: "" }));
     try { await fn(); } catch (e) { setErr(x => ({ ...x, setup: errMsg(e) })); }
   }
-
   const loadDemo = () => guard(async () => {
     const r = await api.loadDemo(); setInfo(r); setModelName(r.model);
     setTarget(r.suggested.target); setSensitive(r.suggested.sensitive); reset();
@@ -42,10 +52,8 @@ export default function Dashboard() {
   }
   async function runAudit() {
     set("audit", true); setAi(null); setErr({ setup: "", ai: "" });
-    try {
-      const r = await api.audit(target, sensitive); setAudit(r); setCf(r.counterfactual);
-      runAi();
-    } catch (e) { setErr(x => ({ ...x, setup: errMsg(e) })); } finally { set("audit", false); }
+    try { const r = await api.audit(target, sensitive); setAudit(r); setCf(r.counterfactual); runAi(); }
+    catch (e) { setErr(x => ({ ...x, setup: errMsg(e) })); } finally { set("audit", false); }
   }
   async function runProbe(n: number) {
     set("cf", true);
@@ -56,69 +64,102 @@ export default function Dashboard() {
   const ready = !!info && !!modelName;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-16">
-      <header className="flex items-baseline justify-between border-b border-line py-5">
-        <div>
-          <h1 className="font-display text-3xl font-semibold">FairLens</h1>
-          <p className="text-sm text-muted">See what accuracy can't.</p>
+    <div className="min-h-screen bg-muted/30">
+      <header className="border-b bg-background">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <ScanSearch className="size-6" />
+            <div><h1 className="text-lg leading-tight font-semibold">FairLens</h1><p className="text-xs text-muted-foreground">See what accuracy can't.</p></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={loadDemo}><Database />Load Adult Income demo</Button>
+            <ThemeToggle />
+          </div>
         </div>
-        <button onClick={loadDemo} className="border border-ink px-3 py-1.5 text-sm font-medium">Load Adult Income demo</button>
       </header>
 
-      <section className="mt-5 bg-white p-5">
-        <h2 className="font-display text-xl font-semibold">Set up the audit</h2>
-        <div className="mt-3 grid gap-4 md:grid-cols-4">
-          <label className="text-sm">Model (.joblib / .pkl)
-            <input type="file" accept=".joblib,.pkl" onChange={e => upModel(e.target.files?.[0])} className="mt-1 block w-full text-xs" />
-          </label>
-          <label className="text-sm">Dataset (.csv)
-            <input type="file" accept=".csv" onChange={e => upData(e.target.files?.[0])} className="mt-1 block w-full text-xs" />
-          </label>
-          <label className="text-sm">Target column
-            <select value={target} onChange={e => setTarget(e.target.value)} disabled={!info} className="mt-1 block w-full border border-line bg-white px-2 py-1.5">
-              {info?.columns.map((c: string) => <option key={c}>{c}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">Sensitive attribute
-            <select value={sensitive} onChange={e => setSensitive(e.target.value)} disabled={!info} className="mt-1 block w-full border border-line bg-white px-2 py-1.5">
-              {info?.columns.filter((c: string) => c !== target).map((c: string) => <option key={c}>{c}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="mt-4 flex items-center gap-4">
-          <button onClick={runAudit} disabled={!ready || busy.audit} className="bg-ink px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
-            {busy.audit ? "Running audit…" : "Run audit"}
-          </button>
-          <span className="text-sm text-muted">{modelName ? `Model: ${modelName}` : "No model loaded"}{info ? ` · ${info.rows} rows` : ""}</span>
-        </div>
-        {err.setup && <p role="alert" className="mt-3 text-sm text-flag">{err.setup}</p>}
-      </section>
+      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Set up the audit</CardTitle>
+            <CardDescription>{modelName ? `Model: ${modelName}` : "No model loaded"}{info ? ` · ${info.rows} rows` : ""}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-1.5"><Label htmlFor="model">Model (.joblib / .pkl)</Label>
+                <Input id="model" type="file" accept=".joblib,.pkl" onChange={e => upModel(e.target.files?.[0])} /></div>
+              <div className="grid gap-1.5"><Label htmlFor="data">Dataset (.csv)</Label>
+                <Input id="data" type="file" accept=".csv" onChange={e => upData(e.target.files?.[0])} /></div>
+              <div className="grid gap-1.5"><Label>Target column</Label>
+                <Select value={target} onValueChange={setTarget} disabled={!info}>
+                  <SelectTrigger><SelectValue placeholder="Select target" /></SelectTrigger>
+                  <SelectContent>{info?.columns.map((c: string) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select></div>
+              <div className="grid gap-1.5"><Label>Sensitive attribute</Label>
+                <Select value={sensitive} onValueChange={setSensitive} disabled={!info}>
+                  <SelectTrigger><SelectValue placeholder="Select attribute" /></SelectTrigger>
+                  <SelectContent>{info?.columns.filter((c: string) => c !== target).map((c: string) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select></div>
+            </div>
+            <Button onClick={runAudit} disabled={!ready || busy.audit}><Play />{busy.audit ? "Running audit…" : "Run audit"}</Button>
+            {err.setup && <Alert variant="destructive"><TriangleAlert /><AlertTitle>Something went wrong</AlertTitle><AlertDescription>{err.setup}</AlertDescription></Alert>}
+          </CardContent>
+        </Card>
 
-      {m && (
-        <>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard label="Accuracy" value={pct(m.accuracy)} hint={`Share of correct predictions overall. Positive class: ${m.positive_label}.`} />
-            <MetricCard label="Demographic parity difference" value={m.demographic_parity_difference.toFixed(3)} flag={m.demographic_parity_difference > 0.1}
-              hint="Gap between highest and lowest group selection rates. 0 means equal rates." />
-            <MetricCard label="Equalized odds difference" value={m.equalized_odds_difference.toFixed(3)} flag={m.equalized_odds_difference > 0.1}
-              hint="Larger of the true-positive and false-positive rate gaps across groups." />
-            <MetricCard label="Counterfactual change rate" value={cf ? pct(cf.counterfactual_change_rate) : "n/a"} flag={!!cf && cf.counterfactual_change_rate > 0.05}
-              hint="Predictions that changed when only the sensitive attribute was flipped." />
-          </div>
-          <p className="mt-2 text-xs text-muted">Metrics are measurements, not verdicts. Whether a gap matters depends on context.</p>
+        {m && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Accuracy" value={pct(m.accuracy)} hint={`Share of correct predictions. Positive class: ${m.positive_label}.`} />
+              <StatCard label="Demographic parity diff." value={m.demographic_parity_difference.toFixed(3)} flag={m.demographic_parity_difference > 0.1}
+                hint="Gap between highest and lowest group selection rates. 0 means equal." />
+              <StatCard label="Equalized odds diff." value={m.equalized_odds_difference.toFixed(3)} flag={m.equalized_odds_difference > 0.1}
+                hint="Larger of the TPR and FPR gaps across groups." />
+              <StatCard label="Counterfactual change" value={cf ? pct(cf.counterfactual_change_rate) : "n/a"} flag={!!cf && cf.counterfactual_change_rate > 0.05}
+                hint="Predictions that changed when only the sensitive attribute was flipped." />
+            </div>
+            <p className="text-xs text-muted-foreground">Metrics are measurements, not verdicts. Whether a gap matters depends on context.</p>
 
-          <section className="mt-5 bg-white p-5">
-            <h2 className="font-display text-xl font-semibold">Group performance by {audit.sensitive_attribute}</h2>
-            <div className="mt-3"><GroupChart groups={audit.groups} /></div>
-          </section>
+            <Card>
+              <CardHeader>
+                <CardTitle>Group performance by {audit.sensitive_attribute}</CardTitle>
+                <CardDescription>{Object.entries(audit.groups).map(([g, v]: any) => `${g} (${v.count})`).join(" · ")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="chart">
+                  <TabsList><TabsTrigger value="chart">Chart</TabsTrigger><TabsTrigger value="table">Table</TabsTrigger><TabsTrigger value="gaps">Largest gaps</TabsTrigger></TabsList>
+                  <TabsContent value="chart"><GroupChart groups={audit.groups} /></TabsContent>
+                  <TabsContent value="table">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Group</TableHead><TableHead>Rows</TableHead><TableHead>Selection</TableHead><TableHead>Accuracy</TableHead><TableHead>TPR</TableHead><TableHead>FPR</TableHead></TableRow></TableHeader>
+                      <TableBody>{Object.entries(audit.groups).map(([g, v]: any) => (
+                        <TableRow key={g}><TableCell className="font-medium">{g}</TableCell><TableCell>{v.count}</TableCell>
+                          <TableCell>{pct(v.selection_rate)}</TableCell><TableCell>{pct(v.accuracy)}</TableCell>
+                          <TableCell>{pct(v.true_positive_rate)}</TableCell><TableCell>{pct(v.false_positive_rate)}</TableCell></TableRow>))}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
+                  <TabsContent value="gaps">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Metric</TableHead><TableHead>Highest</TableHead><TableHead>Lowest</TableHead><TableHead>Gap</TableHead></TableRow></TableHeader>
+                      <TableBody>{audit.comparison.largest_disparities.map((d: any) => (
+                        <TableRow key={d.metric}><TableCell className="font-medium">{d.metric.replaceAll("_", " ")}</TableCell>
+                          <TableCell>{d.highest_group} ({pct(d.highest_value)})</TableCell><TableCell>{d.lowest_group} ({pct(d.lowest_value)})</TableCell>
+                          <TableCell><Badge variant={d.gap > 0.1 ? "destructive" : "secondary"}>{pct(d.gap)}</Badge></TableCell></TableRow>))}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
 
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            <CounterfactualLab cf={cf} running={busy.cf} onRun={runProbe} />
-            <AuditPanel result={ai} loading={busy.ai} error={err.ai} onRun={runAi} />
-          </div>
-        </>
-      )}
-      <div className="mt-5"><ChatPanel disabled={!audit} /></div>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <CounterfactualLab cf={cf} running={busy.cf} onRun={runProbe} />
+              <AuditPanel result={ai} loading={busy.ai} error={err.ai} onRun={runAi} />
+            </div>
+          </>
+        )}
+        <ChatPanel disabled={!audit} />
+      </main>
     </div>
   );
 }
