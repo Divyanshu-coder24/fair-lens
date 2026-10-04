@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Source Serif 4", Georgia, serif;
+  --color-paper: #f2f4f3;
+  --color-ink: #17212b;
+  --color-muted: #5d6b78;
+  --color-line: #d5dbdf;
+  --color-ga: #1d6a8a;   /* group A */
+  --color-gb: #c4772a;   /* group B */
+  --color-flag: #a8322d;
+}
+body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--color-ga); outline-offset: 2px; }
